@@ -1,0 +1,7 @@
+name = "fatpipe-consumer"
+main = "worker.js"
+compatibility_date = "2023-08-23"
+
+# wrangler.toml
+[observability]
+enabled = true
