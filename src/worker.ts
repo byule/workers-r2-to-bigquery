@@ -155,6 +155,7 @@ export default {
           continue;
         }
 
+        console.log("Start processing:", event.object.key);
         const dataStream = await processR2Object(event.object.key, env.R2_FATPIPE);
         await insertIntoBq(dataStream, env);
         message.ack();
