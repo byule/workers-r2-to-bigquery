@@ -55,10 +55,13 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
   let totalBytes = 0;
   let totalRecords = 0;
   let successfulInserts = 0;
+  let failedInserts = 0;
+  let skippedRecords = 0;
 
   for await (const item of dataStream) {
     if ('error' in item) {
       console.error(`Skipping malformed JSON at line ${item.lineNumber}: ${item.error}`);
+      skippedRecords++;
       continue;
     }
 
@@ -70,8 +73,9 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
     
     if (batchSizeBytes + recordSizeBytes > maxBatchSizeBytes && batch.length > 0) {
       const result = await sendBatchToBigQuery(url, jwt, batch);
-      handleBigQueryResponse(result, batch);
-      successfulInserts += batch.length - (result.insertErrors?.length || 0);
+      const { batchSuccessful, batchFailed } = handleBigQueryResponse(result, batch);
+      successfulInserts += batchSuccessful;
+      failedInserts += batchFailed;
       batch = [];
       batchSizeBytes = 0;
     }
@@ -82,32 +86,32 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
 
   if (batch.length > 0) {
     const result = await sendBatchToBigQuery(url, jwt, batch);
-    handleBigQueryResponse(result, batch);
-    successfulInserts += batch.length - (result.insertErrors?.length || 0);
+    const { batchSuccessful, batchFailed } = handleBigQueryResponse(result, batch);
+    successfulInserts += batchSuccessful;
+    failedInserts += batchFailed;
   }
 
-  console.log(`Processed ${totalRecords} records, ${(totalBytes/1000000).toFixed(2)} MB`);
-  console.log(`Successfully inserted ${successfulInserts} records`);
+  console.log(`Operation summary: Processed ${totalRecords} records (${(totalBytes/1000000).toFixed(2)} MB), Successfully inserted: ${successfulInserts}, Failed: ${failedInserts}, Skipped: ${skippedRecords}`);
 
-  if (successfulInserts < totalRecords) {
-    throw new Error(`Failed to insert ${totalRecords - successfulInserts} records`);
+  if (failedInserts > 0) {
+    throw new Error(`Failed to insert ${failedInserts} records`);
   }
 }
 
-function handleBigQueryResponse(response: BigQueryResponse, batch: BatchItem[]): void {
-  if (response.insertErrors && response.insertErrors.length > 0) {
-    const failedCount = response.insertErrors.length;
-    const successCount = batch.length - failedCount;
-    console.log(`Batch insert partial success: ${successCount} inserted, ${failedCount} failed`);
+function handleBigQueryResponse(response: BigQueryResponse, batch: BatchItem[]): { batchSuccessful: number, batchFailed: number } {
+  const failedCount = response.insertErrors?.length || 0;
+  const successCount = batch.length - failedCount;
 
-    const firstError = response.insertErrors[0];
+  if (failedCount > 0) {
+    const firstError = response.insertErrors![0];
     const lineNumber = batch[firstError.index].lineNumber;
     const errorMessage = firstError.errors[0]?.message || 'Unknown error';
+    console.error(`Batch insert partial success: ${successCount} inserted, ${failedCount} failed`);
     console.error(`First error at line ${lineNumber}: ${errorMessage}`);
     console.error('Problematic object:', JSON.stringify(batch[firstError.index].json, null, 2));
-
-    throw new Error(`BigQuery insert errors: ${failedCount} rows failed`);
   }
+
+  return { batchSuccessful: successCount, batchFailed: failedCount };
 }
 
 async function processR2Object(key: string, r2Binding: R2Bucket): Promise<AsyncGenerator<StreamItem | ErrorItem, void, unknown>> {
