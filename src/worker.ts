@@ -102,8 +102,6 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
     const errorMessage = `${errors.length} insertion errors:\n${JSON.stringify(errors.slice(0, 10))}`;
     console.error(errorMessage);
     throw new Error(errorMessage);
-  } else {
-    console.log('All batches inserted successfully');
   }
 }
 
@@ -112,8 +110,6 @@ async function processR2Object(key: string, r2Binding: R2Bucket): Promise<AsyncG
   if (!obj) {
     throw new Error(`Object not found: ${key}`);
   }
-
-  console.log(`File Length: ${obj.size/1000000}MB`);
 
   const compressedStream = obj.body;
   if (!compressedStream) {
@@ -153,8 +149,6 @@ export default {
 
         const dataStream = await processR2Object(event.object.key, env.R2_FATPIPE);
         await insertIntoBq(dataStream, env);
-
-        console.log(`Processed and inserted data for key: ${event.object.key}`);
       } catch (error) {
         console.error("Error processing R2 event:", (error as Error).stack);
       }
