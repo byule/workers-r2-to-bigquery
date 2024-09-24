@@ -61,7 +61,6 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
   let totalBytes = 0;
   let totalRecords = 0;
   let errors: Error[] = [];
-  let isFirstRow = true;
 
   for await (const item of dataStream) {
     if ('error' in item) {
@@ -72,11 +71,6 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
     const { json, bytes, lineNumber } = item;
     totalBytes += bytes;
     totalRecords++;
-    
-    if (isFirstRow) {
-      console.log("First row:", JSON.stringify(json, null, 2));
-      isFirstRow = false;
-    }
     
     const recordSizeBytes = JSON.stringify(json).length;
     
@@ -105,7 +99,7 @@ async function insertIntoBq(dataStream: AsyncGenerator<StreamItem | ErrorItem, v
   console.log(`Processed ${totalRecords} records, ${(totalBytes/1000000).toFixed(2)} MB`);
 
   if (errors.length > 0) {
-    const errorMessage = `Encountered ${errors.length} errors during batch insertion`;
+    const errorMessage = `${errors.length} insertion errors:\n${JSON.stringify(errors.slice(0, 10))}`;
     console.error(errorMessage);
     throw new Error(errorMessage);
   } else {
@@ -153,10 +147,7 @@ export default {
     for (const message of batch.messages) {
       try {
         const event = message.body;
-        console.log("Received R2 event:", JSON.stringify(event, null, 2));
-
         if (event.object.key.startsWith('__temporary')) {
-          console.log(`Skipping temporary file: ${event.object.key}`);
           continue;
         }
 
