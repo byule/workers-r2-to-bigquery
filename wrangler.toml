@@ -1,8 +1,16 @@
 name = "fatpipe-consumer"
-main = "src/worker.js"
+main = "src/worker.ts"
 compatibility_date = "2024-09-10"
 workers_dev = true
 
 [[r2_buckets]]
 binding = "R2_FATPIPE"
 bucket_name = "fatpipe"
+
+[observability]
+enabled = true
+
+[vars]
+BQ_PROJECT_ID = "cloudflare-workers-perf"
+BQ_DATASET_ID = "fatpipe"
+BQ_TABLE_ID = "fatpipe"
